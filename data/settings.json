@@ -1,0 +1,13 @@
+{
+  "auto_play_pronunciation": false,
+  "auto_speak_definition": false,
+  "clear_history_on_exit": true,
+  "auto_export_history": true,
+  "play_sound_effects": true,
+  "font_size": "large",
+  "theme": "blue",
+  "audio_volume": 95,
+  "search_suggestions": true,
+  "offline_mode": true,
+  "auto_complete": true
+}

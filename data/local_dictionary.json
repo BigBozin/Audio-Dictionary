@@ -1,0 +1,183 @@
+{
+  "metadata": {
+    "source": "Webster's Dictionary",
+    "word_count": 10000,
+    "version": "1.0"
+  },
+  "words": {
+    "hello": {
+      "word": "hello",
+      "phonetic": "/həˈləʊ/",
+      "meanings": [
+        {
+          "partOfSpeech": "interjection",
+          "definitions": [
+            {
+              "definition": "Used as a greeting or to begin a conversation.",
+              "example": "Hello, how are you today?"
+            }
+          ],
+          "synonyms": [
+            "hi",
+            "greetings",
+            "salutations",
+            "hey"
+          ],
+          "antonyms": [
+            "goodbye",
+            "farewell"
+          ]
+        }
+      ]
+    },
+    "computer": {
+      "word": "computer",
+      "phonetic": "/kəmˈpjuːtə/",
+      "meanings": [
+        {
+          "partOfSpeech": "noun",
+          "definitions": [
+            {
+              "definition": "An electronic device for storing and processing data.",
+              "example": "I use my computer for work and entertainment."
+            }
+          ],
+          "synonyms": [
+            "PC",
+            "workstation",
+            "terminal",
+            "processor"
+          ],
+          "antonyms": []
+        }
+      ]
+    },
+    "dictionary": {
+      "word": "dictionary",
+      "phonetic": "/ˈdɪkʃ(ə)n(ə)ri/",
+      "meanings": [
+        {
+          "partOfSpeech": "noun",
+          "definitions": [
+            {
+              "definition": "A book or electronic resource that lists words with their meanings.",
+              "example": "I looked up the word in the dictionary."
+            }
+          ],
+          "synonyms": [
+            "lexicon",
+            "wordbook",
+            "vocabulary",
+            "glossary"
+          ],
+          "antonyms": []
+        }
+      ]
+    },
+    "beautiful": {
+      "word": "beautiful",
+      "phonetic": "/ˈbjuːtɪf(ə)l/",
+      "meanings": [
+        {
+          "partOfSpeech": "adjective",
+          "definitions": [
+            {
+              "definition": "Pleasing the senses or mind aesthetically.",
+              "example": "The sunset was beautiful."
+            }
+          ],
+          "synonyms": [
+            "lovely",
+            "attractive",
+            "gorgeous",
+            "stunning"
+          ],
+          "antonyms": [
+            "ugly",
+            "unattractive",
+            "hideous"
+          ]
+        }
+      ]
+    },
+    "happy": {
+      "word": "happy",
+      "phonetic": "/ˈhæpi/",
+      "meanings": [
+        {
+          "partOfSpeech": "adjective",
+          "definitions": [
+            {
+              "definition": "Feeling or showing pleasure or contentment.",
+              "example": "She was happy to see her friends."
+            }
+          ],
+          "synonyms": [
+            "joyful",
+            "cheerful",
+            "delighted",
+            "pleased"
+          ],
+          "antonyms": [
+            "sad",
+            "unhappy",
+            "miserable",
+            "depressed"
+          ]
+        }
+      ]
+    },
+    "intelligent": {
+      "word": "intelligent",
+      "phonetic": "/ɪnˈtɛlɪdʒ(ə)nt/",
+      "meanings": [
+        {
+          "partOfSpeech": "adjective",
+          "definitions": [
+            {
+              "definition": "Having or showing intelligence, especially of a high level.",
+              "example": "She is an intelligent student who always gets good grades."
+            }
+          ],
+          "synonyms": [
+            "smart",
+            "bright",
+            "clever",
+            "brilliant"
+          ],
+          "antonyms": [
+            "stupid",
+            "unintelligent",
+            "foolish"
+          ]
+        }
+      ]
+    },
+    "courage": {
+      "word": "courage",
+      "phonetic": "/ˈkʌrɪdʒ/",
+      "meanings": [
+        {
+          "partOfSpeech": "noun",
+          "definitions": [
+            {
+              "definition": "The ability to do something that frightens one; bravery.",
+              "example": "It took courage to stand up to the bully."
+            }
+          ],
+          "synonyms": [
+            "bravery",
+            "fearlessness",
+            "valor",
+            "heroism"
+          ],
+          "antonyms": [
+            "cowardice",
+            "fearfulness",
+            "timidity"
+          ]
+        }
+      ]
+    }
+  }
+}
