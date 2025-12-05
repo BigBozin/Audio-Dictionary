@@ -114,83 +114,47 @@ class DictionaryModel:
             return None
     
     def fetch_word_data(self, word: str, callback: Callable, use_suggestions: bool = True) -> None:
-        """Fetch word definition - OPTIMIZED for speed"""
+        """Fetch word definition - ALWAYS TRY ONLINE FIRST, THEN OFFLINE"""
         def fetch_thread():
             start_time = time.time()
             word_lower = word.lower().strip()
             print(f"🔍 Searching for: '{word_lower}'")
             
             # Check cache first (FASTEST)
-            cache_key = f"{word_lower}_{use_suggestions}_{self.offline_mode}"
+            cache_key = f"{word_lower}_{use_suggestions}"
             if cache_key in self.search_cache:
                 cached_data = self.search_cache[cache_key]
                 print(f"✅ Found in cache: '{word_lower}'")
                 callback(True, cached_data['data'], cached_data['audio_url'], cached_data['source'])
                 return
             
-            # If offline mode is enabled, only use local dictionary
-            if self.offline_mode:
-                print("📴 Offline mode - using local dictionary only")
+            # STEP 1: ALWAYS TRY ONLINE FIRST (unless offline mode is explicitly enabled)
+            if not self.offline_mode:
+                print("🌐 Attempting online search first...")
+                self._try_online_then_local(word_lower, callback, use_suggestions, start_time)
+            else:
+                # Offline mode explicitly enabled - use local only
+                print("📴 Offline mode enabled - using local dictionary only")
                 self._fetch_from_local_dict_fast(word_lower, callback, use_suggestions, start_time)
-                return
-            
-            # PARALLEL SEARCH: Try both online and local simultaneously for speed
-            self._fetch_parallel(word_lower, callback, use_suggestions, start_time)
         
         threading.Thread(target=fetch_thread, daemon=True).start()
-    
-    def _fetch_parallel(self, word: str, callback: Callable, use_suggestions: bool, start_time: float):
-        """Fetch from both sources in parallel for fastest response"""
-        result_online = [None]
-        result_local = [None]
+
+    def _try_online_then_local(self, word: str, callback: Callable, use_suggestions: bool, start_time: float):
+        """Try online first, then fall back to local if online fails"""
+        # First check if we have internet connection
+        if not self.check_internet_connection():
+            print("🌐 No internet connection, switching to offline mode")
+            # If no internet, go straight to local dictionary
+            self._fetch_from_local_dict_fast(word, callback, use_suggestions, start_time)
+            return
         
-        def online_callback(success, data, audio_url, source):
-            result_online[0] = (success, data, audio_url, source)
-        
-        def local_callback(success, data, audio_url, source):
-            result_local[0] = (success, data, audio_url, source)
-        
-        # Start both searches
-        online_thread = threading.Thread(
-            target=self._fetch_online_fast, 
-            args=(word, online_callback, start_time),
-            daemon=True
-        )
-        
-        local_thread = threading.Thread(
-            target=self._fetch_local_fast,
-            args=(word, local_callback, use_suggestions, start_time),
-            daemon=True
-        )
-        
-        online_thread.start()
-        local_thread.start()
-        
-        # Wait for first successful result
-        online_thread.join(timeout=2)  # Don't wait too long
-        local_thread.join(timeout=2)
-        
-        # Prefer online results if available
-        if result_online[0] and result_online[0][0]:  # Online success
-            success, data, audio_url, source = result_online[0]
-            self._cache_result(word, use_suggestions, data, audio_url, source)
-            callback(success, data, audio_url, source)
-        elif result_local[0] and result_local[0][0]:  # Local success
-            success, data, audio_url, source = result_local[0]
-            self._cache_result(word, use_suggestions, data, audio_url, source)
-            callback(success, data, audio_url, source)
-        else:
-            # Both failed, try suggestions
-            self._try_fuzzy_match_fast(word, callback, start_time)
-    
-    def _fetch_online_fast(self, word: str, callback: Callable, start_time: float):
-        """Fast online search with timeout"""
+        # Try online search with timeout
         try:
             api_url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
             print(f"🌐 Online search: {api_url}")
             
-            # Use shorter timeout for faster response
-            response = requests.get(api_url, timeout=3)
+            # Use timeout for online request
+            response = requests.get(api_url, timeout=5)  # 5 second timeout
             
             if response.status_code == 200:
                 data = response.json()
@@ -200,44 +164,29 @@ class DictionaryModel:
                 if converted_data:
                     audio_url = self._extract_audio_url_free_api(data)
                     
-                    # Save to local dictionary for future searches
+                    # Save to local dictionary for future offline use
                     self._save_online_word_to_local(word, converted_data)
                     
                     total_time = time.time() - start_time
                     print(f"⏱️ Online search completed in {total_time:.2f}s")
                     
+                    # Cache the result
+                    self._cache_result(word, use_suggestions, converted_data, audio_url, "online")
                     callback(True, converted_data, audio_url, "online")
                     return
-            
-            print(f"❌ Online failed for '{word}'")
-            callback(False, None, None, "online_error")
-            
+            else:
+                print(f"❌ Online API returned status {response.status_code} for '{word}'")
+                
         except requests.exceptions.Timeout:
-            print(f"⏰ Online timeout for '{word}'")
-            callback(False, None, None, "online_timeout")
+            print(f"⏰ Online timeout for '{word}' - switching to offline")
+        except requests.exceptions.ConnectionError:
+            print(f"🔌 Connection error for '{word}' - switching to offline")
         except Exception as e:
             print(f"❌ Online error for '{word}': {e}")
-            callback(False, None, None, "online_error")
-    
-    def _fetch_local_fast(self, word: str, callback: Callable, use_suggestions: bool, start_time: float):
-        """Fast local dictionary search"""
-        try:
-            exact_data = self._get_webster_word_data_enhanced(word)
-            if exact_data:
-                total_time = time.time() - start_time
-                print(f"✅ Local found '{word}' in {total_time:.2f}s")
-                callback(True, exact_data, None, "webster")
-                return
-            
-            # If not found and suggestions enabled, try fuzzy matching
-            if use_suggestions:
-                self._try_fuzzy_match_fast(word, callback, start_time)
-            else:
-                callback(False, f"Word '{word}' not found in dictionary.", None, "offline")
-                
-        except Exception as e:
-            print(f"❌ Local error for '{word}': {e}")
-            callback(False, f"Error: {str(e)}", None, "error")
+        
+        # If we reach here, online search failed - try local
+        print(f"🔄 Online search failed, trying local dictionary for '{word}'")
+        self._fetch_from_local_dict_fast(word, callback, use_suggestions, start_time)
     
     def _fetch_from_local_dict_fast(self, word: str, callback: Callable, use_suggestions: bool, start_time: float):
         """Fast local-only search"""
@@ -246,6 +195,8 @@ class DictionaryModel:
             if exact_data:
                 total_time = time.time() - start_time
                 print(f"✅ Local found '{word}' in {total_time:.2f}s")
+                # Cache the result
+                self._cache_result(word, use_suggestions, exact_data, None, "webster")
                 callback(True, exact_data, None, "webster")
                 return
             
@@ -484,6 +435,8 @@ class DictionaryModel:
                     total_time = time.time() - start_time
                     print(f"💡 Using suggestion: '{suggested_word}' for '{word}' in {total_time:.2f}s")
                     
+                    # Cache the result
+                    self._cache_result(word, True, exact_data, None, "webster_suggestion")
                     # Add to history with original word but suggested data
                     self.add_to_history(word, exact_data, "webster_suggestion")
                     callback(True, exact_data, None, "webster_suggestion")
@@ -529,7 +482,7 @@ class DictionaryModel:
     
     def _cache_result(self, word: str, use_suggestions: bool, data: Any, audio_url: str, source: str):
         """Cache search results for faster future searches"""
-        cache_key = f"{word.lower()}_{use_suggestions}_{self.offline_mode}"
+        cache_key = f"{word.lower()}_{use_suggestions}"
         
         # Add to cache
         self.search_cache[cache_key] = {

@@ -2,7 +2,7 @@
   "auto_play_pronunciation": false,
   "auto_speak_definition": false,
   "clear_history_on_exit": true,
-  "auto_export_history": true,
+  "auto_export_history": false,
   "play_sound_effects": true,
   "font_size": "large",
   "theme": "blue",

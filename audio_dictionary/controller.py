@@ -24,6 +24,20 @@ class DictionaryController:
         
         # Apply ALL settings from the loaded file
         self._apply_all_settings()
+
+        # If settings requested offline mode but we have internet, temporarily prefer online
+        try:
+            if self.offline_mode:
+                has_conn = self.model.check_internet_connection()
+                if has_conn:
+                    print("ℹ️ Settings specify offline mode, but internet is available — using online for this session")
+                    # Temporarily override for this session (do not change saved settings)
+                    self.offline_mode = False
+                    self.model.set_offline_mode(False)
+                    # Show wifi alert false so UI doesn't show offline banner
+                    self.show_wifi_alert = False
+        except Exception as e:
+            print(f"⚠️ Connectivity check at startup failed: {e}")
         
         self.running = True
         self.audio_available = False
@@ -60,6 +74,8 @@ class DictionaryController:
         self.progress_value = 0
         self.progress_max = 100
         self.progress_message = ""
+        # Track internet connectivity state
+        self.has_connection = True
         
         # Apply volume setting
         self._apply_volume_setting()
@@ -168,16 +184,22 @@ class DictionaryController:
             current_time = time.time()
             
             # Check internet connection every 10 seconds (unless in offline mode)
-            if not self.offline_mode and current_time - last_connection_check > 10:
-                if not self.model.check_internet_connection():
-                    self.show_wifi_alert = True
-                    if self.data_source == "online":
-                        self.data_source = "offline"
-                else:
-                    self.show_wifi_alert = False
-                    if self.data_source == "offline":
-                        self.data_source = "online"
+            # Check internet connection every 10 seconds
+            if current_time - last_connection_check > 10:
+                has_connection = False
+                try:
+                    has_connection = self.model.check_internet_connection()
+                except Exception:
+                    has_connection = False
                 last_connection_check = current_time
+
+                # Show offline/notification when explicitly in offline mode or when connection missing
+                if self.offline_mode:
+                    self.show_wifi_alert = True
+                else:
+                    self.show_wifi_alert = not has_connection
+                # Save current connectivity state for view usage
+                self.has_connection = has_connection
         
             
             # Handle events
@@ -226,13 +248,23 @@ class DictionaryController:
             # Update progress bar - USE SPINNER METHODS
             self.update_progress(self.progress_value, self.progress_max, self.progress_message)
             
-            # Draw interface
+            # Prepare offline/connection message to show (string or False)
+            wifi_message = False
+            if self.show_wifi_alert:
+                if self.offline_mode:
+                    wifi_message = "📴 Offline mode enabled — using local dictionary"
+                else:
+                    wifi_message = "⚠️ No internet connection — using local dictionary"
+
+            # Draw interface (pass wifi_message to allow custom alert text)
             search_rect, history_rect, audio_rects, settings_close_rect = self.view.draw_main_interface(
                 None,
                 self.audio_available,
                 self.data_source,
                 self.model.get_local_word_count(),
-                self.model.get_dictionary_source()
+                self.model.get_dictionary_source(),
+                wifi_message,
+                self.has_connection
             )
             
             # Store button rects for click detection
@@ -242,10 +274,7 @@ class DictionaryController:
             self.settings_rect = self.view.settings_rect  # Get from view
             self.settings_close_rect = settings_close_rect
             
-            # Show WiFi alert if needed (only if not in offline mode)
-            # The view will now draw it at the top right corner
-            if self.show_wifi_alert and not self.offline_mode:
-                self.view.draw_wifi_alert("No internet connection")
+            # (Notification drawing is handled by the view via the `show_wifi_alert` / message passed above)
             
             pygame.display.flip()
             clock.tick(60)
@@ -529,7 +558,7 @@ class DictionaryController:
         self.view.scroll_offset = 0
     
     def on_word_data_received(self, success, data, audio_url, source):
-        """Callback when word data is received"""
+        """Callback when word data is received - MODIFIED FOR ONLINE-FIRST PRIORITY"""
         self.stop_progress()
         self.data_source = source
         
@@ -575,8 +604,13 @@ class DictionaryController:
                 else:
                     self.view.show_error(data)
             else:
-                self.view.show_error(data)
-                
+                # If no internet and offline search also failed
+                if self.data_source == "offline" and not self.model.check_internet_connection():
+                    error_msg = "No internet connection and word not found in local dictionary"
+                    self.view.show_error(error_msg)
+                else:
+                    self.view.show_error(data)
+                    
             self.audio_available = False
             self.current_word_data = None
             self.view.set_word_data(None)

@@ -534,9 +534,9 @@ class DictionaryView:
         element_y = (top_bar_height - element_height) // 2 + 5  # MOVED DOWN BY 5 PIXELS
         element_spacing = 10
         
-        # Calculate total width needed for all elements
-        total_elements_width = 5 * element_width + 4 * element_spacing
-        
+        # Calculate total width needed for all elements (including new History button)
+        total_elements_width = 6 * element_width + 5 * element_spacing
+
         # Start from right edge and position elements leftwards
         start_x = self.screen_width - 20 - total_elements_width
         
@@ -545,6 +545,8 @@ class DictionaryView:
         self.word_count_rect = pygame.Rect(start_x + 2*(element_width + element_spacing), element_y, element_width, element_height)
         self.definition_indicator_rect = pygame.Rect(start_x + 3*(element_width + element_spacing), element_y, element_width, element_height)
         self.audio_indicator_rect = pygame.Rect(start_x + 4*(element_width + element_spacing), element_y, element_width, element_height)
+        # History button at the far right
+        self.history_top_rect = pygame.Rect(start_x + 5*(element_width + element_spacing), element_y, element_width, element_height)
         
         # Center input box - responsive
         input_width = min(500, self.screen_width - 100)
@@ -626,7 +628,7 @@ class DictionaryView:
                         return
             time.sleep(0.1)
     
-    def draw_top_bar(self, local_word_count, data_source, show_wifi_alert=False):
+    def draw_top_bar(self, local_word_count, data_source, show_wifi_alert=False, is_connected=True):
         """Draw the top bar with icons and status"""
         # Draw top bar background
         pygame.draw.rect(self.screen, self.TOP_BAR_BG, self.top_bar_rect)
@@ -653,19 +655,32 @@ class DictionaryView:
         count_text = self.tiny_font.render(f"{local_word_count:,}", True, (255, 255, 255))
         self.screen.blit(count_text, (self.word_count_rect.x + 40, self.word_count_rect.y + 10))
         
-        # Status indicator - MOVED DOWN
-        if data_source == "online":
-            status_color = self.SUCCESS_COLOR
-            status_icon = self.icons['online']
-            status_text = "ONLINE"
-        elif data_source == "webster":
-            status_color = self.LOCAL_COLOR
-            status_icon = self.icons['local']
-            status_text = "LOCAL"
+        # Status indicator: show connection state and also indicate the data source
+        # Examples: "ONLINE", "ONLINE (LOCAL)", "LOCAL", "OFFLINE"
+        if is_connected:
+            # Connected to the internet
+            if data_source == "online":
+                status_color = self.SUCCESS_COLOR
+                status_icon = self.icons['online']
+                status_text = "ONLINE"
+            else:
+                # Connected but result came from local dictionary
+                status_color = self.SUCCESS_COLOR
+                status_icon = self.icons['online']
+                # Show both connection and source so user knows it's local data
+                src_label = "LOCAL" if data_source.startswith('webster') or data_source in ['webster', 'webster_suggestion'] else data_source.upper()
+                status_text = f"ONLINE ({src_label})"
         else:
-            status_color = self.OFFLINE_COLOR
-            status_icon = self.icons['offline']
-            status_text = "OFFLINE"
+            # Not connected
+            if data_source == "online":
+                status_color = self.OFFLINE_COLOR
+                status_icon = self.icons['offline']
+                status_text = "OFFLINE"
+            else:
+                # Local data while offline
+                status_color = self.LOCAL_COLOR
+                status_icon = self.icons['local']
+                status_text = "LOCAL"
         
         pygame.draw.rect(self.screen, status_color, self.status_rect, border_radius=8)
         self.screen.blit(status_icon, (self.status_rect.x + 10, self.status_rect.y + 10))
@@ -679,6 +694,16 @@ class DictionaryView:
         self.screen.blit(self.icons['settings'], (self.settings_rect.x + 10, self.settings_rect.y + 6))
         settings_text = self.tiny_font.render("Settings", True, (255, 255, 255))
         self.screen.blit(settings_text, (self.settings_rect.x + 40, self.settings_rect.y + 10))
+        
+        # History button (moved to top-right)
+        history_hover = False
+        if hasattr(self, 'history_top_rect') and self.history_top_rect:
+            history_hover = self.history_top_rect.collidepoint(self.mouse_pos)
+            history_color = self.HISTORY_COLOR if history_hover else (120, 70, 30)
+            pygame.draw.rect(self.screen, history_color, self.history_top_rect, border_radius=8)
+            self.screen.blit(self.icons['history'], (self.history_top_rect.x + 10, self.history_top_rect.y + 6))
+            history_text = self.tiny_font.render("History", True, (255, 255, 255))
+            self.screen.blit(history_text, (self.history_top_rect.x + 40, self.history_top_rect.y + 10))
         
         # WiFi alert if needed
         if show_wifi_alert:
@@ -734,39 +759,45 @@ class DictionaryView:
             
         try:
             height = 0
+            # initial header + title area
             height += 40
             height += 100
-            
-            for meaning in word_data[0].get('meanings', [])[:3]:
-                height += 40
-                
-                for definition in meaning.get('definitions', [])[:2]:
+
+            # Match display_word_data: up to 4 meanings, up to 3 definitions each
+            for meaning in word_data[0].get('meanings', [])[:4]:
+                height += 40  # part of speech area
+
+                for definition in meaning.get('definitions', [])[:3]:
                     def_text = definition.get('definition', '')
                     if def_text:
-                        wrapped_def = self.wrap_text(def_text, self.content_rect.width - 40)
-                        height += 25 * len(wrapped_def)
-                    
+                        wrapped_def = self.wrap_text(def_text, self.content_rect.width - 50)
+                        # each wrapped line uses ~20px in rendering
+                        height += 20 * max(1, len(wrapped_def))
+
+                    # example lines
                     if definition.get('example'):
                         example_text = f"Example: {definition['example']}"
-                        wrapped_example = self.wrap_text(example_text, self.content_rect.width - 50)
-                        height += 25 * len(wrapped_example)
-                    
-                    height += 15
-                
+                        wrapped_example = self.wrap_text(example_text, self.content_rect.width - 60)
+                        height += 20 * max(1, len(wrapped_example))
+
+                    # spacing after each definition
+                    height += 25
+
                 synonyms = meaning.get('synonyms', [])
                 antonyms = meaning.get('antonyms', [])
-                
+
                 if synonyms:
-                    height += 30
-                    wrapped_synonyms = self.wrap_text(", ".join(synonyms[:5]), self.content_rect.width - 60)
-                    height += 20 * len(wrapped_synonyms)
-                
+                    height += 25
+                    wrapped_synonyms = self.wrap_text(", ".join(synonyms[:8]), self.content_rect.width - 60)
+                    height += 20 * max(1, len(wrapped_synonyms))
+
                 if antonyms:
-                    height += 30
+                    height += 25
                     wrapped_antonyms = self.wrap_text(", ".join(antonyms[:5]), self.content_rect.width - 60)
-                    height += 20 * len(wrapped_antonyms)
-                
-                height += 20
+                    height += 20 * max(1, len(wrapped_antonyms))
+
+                # spacing between meanings
+                height += 25
             
             return max(height + 50, 200)
             
@@ -1424,7 +1455,7 @@ class DictionaryView:
         
         return False
     
-    def draw_main_interface(self, word_data=None, audio_available=False, data_source="online", local_word_count=0, dictionary_source="Unknown", show_wifi_alert=False):
+    def draw_main_interface(self, word_data=None, audio_available=False, data_source="online", local_word_count=0, dictionary_source="Unknown", show_wifi_alert=False, is_connected=True):
         """Draw the main dictionary interface"""
         self.mouse_pos = pygame.mouse.get_pos()
         
@@ -1442,8 +1473,8 @@ class DictionaryView:
         
         self.screen.fill(self.BG_COLOR)
         
-        # Draw top bar
-        self.draw_top_bar(local_word_count, data_source, show_wifi_alert)
+        # Draw top bar (pass connectivity state so local results can be shown as online when connected)
+        self.draw_top_bar(local_word_count, data_source, show_wifi_alert, is_connected)
         
         # Draw elegant title with shadow
         title_text = "Cellusys Audio Dictionary"
@@ -1478,9 +1509,12 @@ class DictionaryView:
         }
         self.spinner.draw(self.screen, self.normal_font, self.small_font, current_theme_dict)
         
-        # Show WiFi alert if needed
+        # Show WiFi alert if needed. `show_wifi_alert` may be a bool or a custom message string.
         if show_wifi_alert:
-            self.draw_wifi_alert("No internet connection")
+            if isinstance(show_wifi_alert, str):
+                self.draw_wifi_alert(show_wifi_alert)
+            else:
+                self.draw_wifi_alert("No internet connection")
         
         if not self.showing_settings and not (self.showing_history and self.selected_history_item is not None):
             # Draw input box with cursor
@@ -1489,45 +1523,31 @@ class DictionaryView:
             # Draw auto-suggestions
             self.draw_auto_suggestions()
             
-            button_y = self.spinner.rect.bottom + 20  # Position buttons below spinner
-            button_spacing = 15
-            
-            # Search button
-            search_rect = pygame.Rect(self.screen_width//2 - 115, button_y, 110, 45)
+            # Place search button directly beside the input box
+            search_rect = pygame.Rect(self.input_box.right + 10, self.input_box.y, 110, self.input_box.height)
             search_hover = search_rect.collidepoint(self.mouse_pos)
-            
+
             shadow_rect = search_rect.copy()
             shadow_rect.y += 3
             shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height), pygame.SRCALPHA)
             pygame.draw.rect(shadow_surface, (0, 0, 0, 40), shadow_surface.get_rect(), border_radius=10)
             self.screen.blit(shadow_surface, shadow_rect)
-            
+
             search_color = self.ACCENT_COLOR if search_hover else (100, 140, 200)
             pygame.draw.rect(self.screen, search_color, search_rect, border_radius=10)
             self.screen.blit(self.icons['search'], (search_rect.x + 15, search_rect.y + 7))
             search_text = self.normal_font.render("Search", True, (255, 255, 255))
             self.screen.blit(search_text, (search_rect.x + 50, search_rect.y + 13))
-            
-            # History button
-            history_rect = pygame.Rect(self.screen_width//2 + 5, button_y, 110, 45)
-            history_hover = history_rect.collidepoint(self.mouse_pos)
-            
-            shadow_rect = history_rect.copy()
-            shadow_rect.y += 3
-            shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(shadow_surface, (0, 0, 0, 40), shadow_surface.get_rect(), border_radius=10)
-            self.screen.blit(shadow_surface, shadow_rect)
-            
-            history_color = self.HISTORY_COLOR if history_hover else (120, 70, 30)
-            pygame.draw.rect(self.screen, history_color, history_rect, border_radius=10)
-            self.screen.blit(self.icons['history'], (history_rect.x + 15, history_rect.y + 7))
-            history_text = self.normal_font.render("History", True, (255, 255, 255))
-            self.screen.blit(history_text, (history_rect.x + 50, history_rect.y + 13))
+
+            # History button lives in the top bar now; use that rect for click detection
+            history_rect = getattr(self, 'history_top_rect', None)
             
             # Audio controls
             audio_rects = {}
             if self.current_word_data and not self.showing_history:
-                control_y = button_y + 70
+                # Place audio controls below the spinner to avoid overlapping the search indicator
+                control_margin = 10
+                control_y = self.spinner.rect.bottom + control_margin
                 
                 # Show audio controls for ALL word types that have audio available
                 has_audio = self.current_word_data[0].get('has_audio', False) if self.current_word_data else False
@@ -2039,24 +2059,21 @@ class DictionaryView:
             # Source indicator with better styling
             source_color = self.WEBSTER_COLOR if data_source == "webster" else self.ACCENT_COLOR
             source_text = self.small_font.render(f"Source: {data_source.upper()}", True, source_color)
-            if y_offset + 30 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                self.screen.blit(source_text, (self.content_rect.x, y_offset))
+            self.screen.blit(source_text, (self.content_rect.x, y_offset))
             y_offset += 40
-            
+
             word = word_data[0].get('word', '')
             phonetic = word_data[0].get('phonetic', '')
-            
+
             # Word title with better styling
             word_text = self.title_font.render(word, True, self.TEXT_COLOR)
-            if y_offset + 45 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                self.screen.blit(word_text, (self.content_rect.x, y_offset))
-            
+            self.screen.blit(word_text, (self.content_rect.x, y_offset))
+
             # Phonetic with better styling
             if phonetic:
                 phonetic_text = self.normal_font.render(f"/{phonetic}/", True, self.ACCENT_COLOR)
-                if y_offset + 90 > self.content_rect.y and y_offset + 45 < self.content_rect.bottom:
-                    self.screen.blit(phonetic_text, (self.content_rect.x + 10, y_offset + 45))
-            
+                self.screen.blit(phonetic_text, (self.content_rect.x + 10, y_offset + 45))
+
             y_offset += 100
             
             # Meanings with IMPROVED LAYOUT
@@ -2069,69 +2086,62 @@ class DictionaryView:
                     pos_text = self.normal_font.render(part_of_speech, True, (255, 255, 255))
                     self.screen.blit(pos_text, (self.content_rect.x + 10, y_offset + 6))
                 y_offset += 40
-                
+
                 # Definitions with better spacing
                 for i, definition in enumerate(meaning.get('definitions', [])[:3]):  # Show more definitions
                     def_text = definition.get('definition', '')
                     if def_text:
                         # Definition number and text
                         def_num = self.small_font.render(f"{i+1}.", True, self.ACCENT_COLOR)
-                        if y_offset + 25 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                            self.screen.blit(def_num, (self.content_rect.x + 10, y_offset))
-                        
+                        self.screen.blit(def_num, (self.content_rect.x + 10, y_offset))
+
                         wrapped_def = self.wrap_text(def_text, self.content_rect.width - 50)
                         for j, line in enumerate(wrapped_def):
-                            if y_offset + 25 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                                def_surface = self.small_font.render(line, True, self.TEXT_COLOR)
-                                self.screen.blit(def_surface, (self.content_rect.x + 35, y_offset + j * 20))
-                            y_offset += 20
-                        
+                            def_surface = self.small_font.render(line, True, self.TEXT_COLOR)
+                            self.screen.blit(def_surface, (self.content_rect.x + 35, y_offset + j * 20))
+                        y_offset += 20 * max(1, len(wrapped_def))
+
                         y_offset += 10
-                    
+
                     # Example with better styling
                     if definition.get('example'):
                         example_text = f"💡 Example: {definition['example']}"
                         wrapped_example = self.wrap_text(example_text, self.content_rect.width - 60)
                         for line in wrapped_example:
-                            if y_offset + 25 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                                ex_surface = self.small_font.render(line, True, self.OFFLINE_COLOR)
-                                self.screen.blit(ex_surface, (self.content_rect.x + 45, y_offset))
+                            ex_surface = self.small_font.render(line, True, self.OFFLINE_COLOR)
+                            self.screen.blit(ex_surface, (self.content_rect.x + 45, y_offset))
                             y_offset += 20
-                        
+
                         y_offset += 10
-                    
+
                     y_offset += 15
                 
                 # Synonyms with better styling - FIXED TO ALWAYS SHOW
                 synonyms = meaning.get('synonyms', [])
                 if synonyms:
                     syn_label = self.small_font.render("📗 Synonyms:", True, self.SYNONYM_COLOR)
-                    if y_offset + 25 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                        self.screen.blit(syn_label, (self.content_rect.x + 20, y_offset))
+                    self.screen.blit(syn_label, (self.content_rect.x + 20, y_offset))
                     y_offset += 25
-                    
+
                     syn_text = ", ".join(synonyms[:8])  # Show more synonyms
                     wrapped_syn = self.wrap_text(syn_text, self.content_rect.width - 60)
                     for line in wrapped_syn:
-                        if y_offset + 20 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                            syn_line = self.small_font.render(line, True, self.TEXT_COLOR)
-                            self.screen.blit(syn_line, (self.content_rect.x + 40, y_offset))
+                        syn_line = self.small_font.render(line, True, self.TEXT_COLOR)
+                        self.screen.blit(syn_line, (self.content_rect.x + 40, y_offset))
                         y_offset += 20
                 
                 # Antonyms with better styling - FIXED TO ALWAYS SHOW
                 antonyms = meaning.get('antonyms', [])
                 if antonyms:
                     ant_label = self.small_font.render("📕 Antonyms:", True, self.ANTONYM_COLOR)
-                    if y_offset + 25 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                        self.screen.blit(ant_label, (self.content_rect.x + 20, y_offset))
+                    self.screen.blit(ant_label, (self.content_rect.x + 20, y_offset))
                     y_offset += 25
-                    
+
                     ant_text = ", ".join(antonyms[:5])
                     wrapped_ant = self.wrap_text(ant_text, self.content_rect.width - 60)
                     for line in wrapped_ant:
-                        if y_offset + 20 > self.content_rect.y and y_offset < self.content_rect.bottom:
-                            ant_line = self.small_font.render(line, True, self.TEXT_COLOR)
-                            self.screen.blit(ant_line, (self.content_rect.x + 40, y_offset))
+                        ant_line = self.small_font.render(line, True, self.TEXT_COLOR)
+                        self.screen.blit(ant_line, (self.content_rect.x + 40, y_offset))
                         y_offset += 20
                 
                 y_offset += 25  # More spacing between meanings
